@@ -10,6 +10,8 @@ public class TestDbContext(DbContextOptions<TestDbContext> options) : DbContext(
     public DbSet<Supplier> Suppliers => Set<Supplier>();
     public DbSet<Contact> Contacts => Set<Contact>();
     public DbSet<Product> Products => Set<Product>();
+    public DbSet<Order> Orders => Set<Order>();
+    public DbSet<OrderLine> OrderLines => Set<OrderLine>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -35,5 +37,11 @@ public class TestDbContext(DbContextOptions<TestDbContext> options) : DbContext(
             .HasMany(s => s.Products)
             .WithOne(p => p.Supplier)
             .HasForeignKey(p => p.SupplierId);
+
+        // DDD-style read-only collection: Order -> Lines, mapped to the private `_lines` field by convention.
+        modelBuilder.Entity<Order>()
+            .HasMany(o => o.Lines)
+            .WithOne(l => l.Order)
+            .HasForeignKey(l => l.OrderId);
     }
 }

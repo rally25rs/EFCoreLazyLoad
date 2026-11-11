@@ -62,7 +62,7 @@ internal static class ModelBuilder
         var properties = new List<PropertyModel>();
         foreach (var property in type.GetMembers().OfType<IPropertySymbol>())
         {
-            var model = BuildProperty(property, classLevel, diagnostics);
+            var model = BuildProperty(property, classLevel, compilation, diagnostics);
             if (model is not null)
             {
                 properties.Add(model);
@@ -109,7 +109,8 @@ internal static class ModelBuilder
             diagnostics.ToEquatableArray());
     }
 
-    private static PropertyModel? BuildProperty(IPropertySymbol property, bool classLevel, List<DiagnosticInfo> diagnostics)
+    private static PropertyModel? BuildProperty(
+        IPropertySymbol property, bool classLevel, Compilation compilation, List<DiagnosticInfo> diagnostics)
     {
         var explicitlyMarked = HasLazyLoadAttribute(property)
             || (property.PartialImplementationPart is { } impl && HasLazyLoadAttribute(impl));
@@ -129,6 +130,13 @@ internal static class ModelBuilder
             if (explicitlyMarked)
             {
                 diagnostics.Add(DiagnosticInfo.Create(Diagnostics.PropertyNotPartial, location, name));
+            }
+            else if (LooksLikeUnimplementedCollectionNavigation(property) is { } exposedField)
+            {
+                // The DDD read-only collection pattern written by hand (`IEnumerable<T> Items => _items`):
+                // it compiles and works with Include, but silently never lazy-loads (nor throws in Throw mode).
+                diagnostics.Add(DiagnosticInfo.Create(
+                    Diagnostics.BackingFieldPropertyNotPartial, location, name, exposedField.Name));
             }
 
             return null;
@@ -194,6 +202,29 @@ internal static class ModelBuilder
             return null;
         }
 
+        // A get-only property over a declared backing field (the DDD read-only collection pattern):
+        //     private readonly List<Line> _lines = [];
+        //     public partial IReadOnlyCollection<Line> Lines { get; }
+        // EF maps the navigation to the field by its naming convention and fills it; the getter only has to ask
+        // the loader to load, then expose the field. It must not use `field`: EF prefers a compiler-generated
+        // backing field over a convention-named one.
+        string? backingFieldReturn = null;
+        if (setter is null && FindBackingField(property) is { } backingField)
+        {
+            backingFieldReturn = GetBackingFieldReturn(property, backingField, compilation);
+            if (backingFieldReturn is null)
+            {
+                diagnostics.Add(DiagnosticInfo.Create(
+                    Diagnostics.BackingFieldIncompatible,
+                    location,
+                    name,
+                    backingField.Name,
+                    backingField.Type.ToDisplayString(),
+                    property.Type.ToDisplayString()));
+                return null;
+            }
+        }
+
         return new PropertyModel(
             // Copied verbatim (includes `partial`); both parts must agree on accessibility,
             // required, virtual/override/sealed/new, etc.
@@ -202,7 +233,90 @@ internal static class ModelBuilder
             EscapeIdentifier(property.Name),
             property.Type.NullableAnnotation == NullableAnnotation.Annotated,
             getter,
-            setter);
+            setter,
+            backingFieldReturn);
+    }
+
+    /// <summary>
+    ///     The field EF Core's backing-field convention would match to the property: <c>_name</c>, <c>_Name</c>,
+    ///     <c>m_name</c>, <c>m_Name</c>, then <c>name</c> (declared on the property's own type).
+    /// </summary>
+    private static IFieldSymbol? FindBackingField(IPropertySymbol property)
+    {
+        var pascal = property.Name;
+        var camel = char.ToLowerInvariant(pascal[0]) + pascal.Substring(1);
+        string[] candidates = ["_" + camel, "_" + pascal, "m_" + camel, "m_" + pascal, camel];
+        foreach (var candidate in candidates)
+        {
+            if (candidate == pascal)
+            {
+                continue;
+            }
+
+            var field = property.ContainingType.GetMembers(candidate)
+                .OfType<IFieldSymbol>()
+                .FirstOrDefault(f => f is { IsStatic: false, IsImplicitlyDeclared: false, IsConst: false });
+            if (field is not null && field.Type.IsReferenceType)
+            {
+                return field;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    ///     What the getter returns: <c>this._f.AsReadOnly()</c> when the field type has a parameterless
+    ///     <c>AsReadOnly()</c> (as <see cref="List{T}" /> does) that converts to the property type, so callers can't
+    ///     cast the result back to the mutable list; otherwise <c>this._f</c> when it converts directly.
+    ///     <see langword="null" /> when neither does.
+    /// </summary>
+    private static string? GetBackingFieldReturn(IPropertySymbol property, IFieldSymbol field, Compilation compilation)
+    {
+        var fieldName = "this." + EscapeIdentifier(field.Name);
+        var fieldNullable = field.Type.NullableAnnotation == NullableAnnotation.Annotated;
+        var suppress = fieldNullable && property.Type.NullableAnnotation != NullableAnnotation.Annotated ? "!" : "";
+
+        var asReadOnly = field.Type.GetMembers("AsReadOnly")
+            .OfType<IMethodSymbol>()
+            .FirstOrDefault(m => m is { IsStatic: false, Parameters.Length: 0, TypeParameters.Length: 0, DeclaredAccessibility: Accessibility.Public });
+        if (asReadOnly is not null && compilation.ClassifyConversion(asReadOnly.ReturnType, property.Type).IsImplicit)
+        {
+            return fieldName + (fieldNullable ? "?" : "") + ".AsReadOnly()" + suppress;
+        }
+
+        var conversion = compilation.ClassifyConversion(field.Type, property.Type);
+        return conversion.IsImplicit && !conversion.IsUserDefined ? fieldName + suppress : null;
+    }
+
+    /// <summary>
+    ///     For EFLL010: a non-partial, get-only collection property (of a class element type other than
+    ///     <see cref="string" />) whose convention backing field is a collection too. Returns that field.
+    /// </summary>
+    private static IFieldSymbol? LooksLikeUnimplementedCollectionNavigation(IPropertySymbol property)
+    {
+        if (property.IsStatic || property.IsIndexer || property.GetMethod is null || property.SetMethod is not null
+            || property.IsImplicitlyDeclared || !IsEntityCollection(property.Type))
+        {
+            return null;
+        }
+
+        return FindBackingField(property) is { } field && IsEntityCollection(field.Type) ? field : null;
+    }
+
+    private static bool IsEntityCollection(ITypeSymbol type)
+    {
+        if (type.SpecialType == SpecialType.System_String)
+        {
+            return false;
+        }
+
+        IEnumerable<INamedTypeSymbol> candidates = type is INamedTypeSymbol named
+            ? type.AllInterfaces.Prepend(named)
+            : type.AllInterfaces;
+        return candidates.Any(i =>
+            i.OriginalDefinition.SpecialType == SpecialType.System_Collections_Generic_IEnumerable_T
+            && i.TypeArguments[0] is { TypeKind: TypeKind.Class, SpecialType: not SpecialType.System_String });
     }
 
     private static ISymbol? FindLoaderMember(INamedTypeSymbol type)

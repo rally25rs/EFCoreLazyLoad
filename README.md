@@ -15,7 +15,7 @@ This package makes those navigations behave the way their types say they do:
 ## Requirements
 
 - .NET 10 (C# 14)
-- Entity Framework Core 10
+- Entity Framework Core 10 (any 10.x version, from 10.0.0)
 
 ## Getting started
 
@@ -56,6 +56,38 @@ public partial class Hobby
 Regular properties in the class are left alone. To opt in only some navigations, put `[LazyLoad]` on those properties instead of on the class (the class must still be `partial`).
 
 You can also override the context's settings for a single entity or navigation. See [Per-entity settings](#per-entity-settings).
+
+#### Read-only collections (DDD style)
+
+If your entities keep a collection in a private field and expose it read-only, declare the navigation as a get-only `partial` property next to the field:
+
+```csharp
+[LazyLoad]
+public partial class Customer
+{
+    private readonly List<Address> _addresses = [];
+
+    public int Id { get; set; }
+
+    public partial IEnumerable<Address> Addresses { get; }
+
+    public void AddAddress(Address address)
+    {
+        if (Addresses.Any(a => a.Street == address.Street)) // reads through the property, so existing addresses are loaded first
+        {
+            throw new InvalidOperationException("Duplicate address.");
+        }
+
+        _addresses.Add(address);
+    }
+}
+```
+
+The package finds the field by EF Core's backing-field naming convention (`_addresses`, `_Addresses`, `m_addresses`, `m_Addresses` or `addresses`). Accessing `Addresses` loads the collection into that field, then returns it. When the field is a `List<T>` and the property is a read-only type such as `IEnumerable<T>`, `IReadOnlyCollection<T>` or `IReadOnlyList<T>`, the property returns `_addresses.AsReadOnly()`, so callers can't cast it back to the list and change it.
+
+Code inside the entity that uses the field directly (`_addresses.Count`, `_addresses.Contains(...)`) does **not** trigger a lazy load, and sees an empty list if the collection wasn't loaded. Read through the property, as `AddAddress` does above, whenever the result depends on what's already in the database.
+
+A property written by hand, such as `public IEnumerable<Address> Addresses => _addresses.AsReadOnly();`, is never lazy-loaded, and in `Throw` mode it doesn't throw either: it returns the empty list. The package reports warning EFLL010 for such properties in a `[LazyLoad]` class.
 
 ### 3. Enable it on your DbContext
 
@@ -231,3 +263,5 @@ The package reports build errors when an entity is not set up correctly:
 | EFLL006 | A `[LazyLoad]` property is static or an indexer. |
 | EFLL007 | A base class has a lazy-loader member that is not accessible from the derived class. |
 | EFLL008 | The project's C# language version is older than 14. |
+| EFLL009 | A get-only `partial` navigation's backing field has a type that can't be returned as the property's type. |
+| EFLL010 | Warning: a `[LazyLoad]` class has a non-`partial`, get-only collection property over a backing field, so it will never be lazy-loaded. Make it `partial` with only `get;`. |

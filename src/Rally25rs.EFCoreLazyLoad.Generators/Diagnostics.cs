@@ -69,4 +69,20 @@ internal static class Diagnostics
         Category,
         DiagnosticSeverity.Error,
         isEnabledByDefault: true);
+
+    public static readonly DiagnosticDescriptor BackingFieldIncompatible = new(
+        "EFLL009",
+        "Backing field type is not compatible with the lazy-loaded property",
+        "Property '{0}' is backed by field '{1}' of type '{2}', which cannot be converted to the property type '{3}'",
+        Category,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
+    public static readonly DiagnosticDescriptor BackingFieldPropertyNotPartial = new(
+        "EFLL010",
+        "Collection over a backing field will not be lazy-loaded",
+        "Property '{0}' exposes backing field '{1}' but is not partial, so it will not be lazy-loaded; declare it as 'partial' with only a 'get;' accessor and the generator will implement it",
+        Category,
+        DiagnosticSeverity.Warning,
+        isEnabledByDefault: true);
 }

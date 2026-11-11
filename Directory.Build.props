@@ -1,0 +1,9 @@
+<Project>
+  <PropertyGroup>
+    <!--
+    The EF Core / Microsoft.Extensions version the tests and samples run against. The library itself accepts any
+    10.x ([10.0.0, 11.0)); CI also runs the tests with -p:EFCoreTestVersion=10.0.0 to prove the lowest version works.
+    -->
+    <EFCoreTestVersion Condition="'$(EFCoreTestVersion)' == ''">10.0.15</EFCoreTestVersion>
+  </PropertyGroup>
+</Project>

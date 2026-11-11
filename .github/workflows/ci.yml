@@ -77,3 +77,33 @@ jobs:
           name: nupkg
           path: artifacts/packages/*.nupkg
           if-no-files-found: error
+
+  # The package accepts any EF Core 10.x ([10.0.0, 11.0)) and builds against 10.0.0, but it subclasses EF's internal
+  # LazyLoader, so the tests also run on the lowest supported version (the build job above uses the latest pinned).
+  test-min-efcore:
+    name: Test on EF Core 10.0.0
+    runs-on: ubuntu-latest
+    env:
+      EFCORE_VERSION: 10.0.0
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v6
+        with:
+          path: ~/.nuget/packages
+          key: nuget-efmin-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/Directory.*.props', 'global.json') }}
+          restore-keys: nuget-efmin-${{ runner.os }}-
+
+      - name: Restore
+        run: dotnet restore -p:EFCoreTestVersion=$EFCORE_VERSION
+
+      - name: Build
+        run: dotnet build --no-restore -c Release -p:EFCoreTestVersion=$EFCORE_VERSION
+
+      - name: Test
+        run: dotnet test --no-build -c Release -p:EFCoreTestVersion=$EFCORE_VERSION

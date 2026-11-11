@@ -25,6 +25,12 @@ public sealed class TestDatabaseFixture : IDisposable
     /// <summary>A <see cref="Supplier" /> with a contact and two products.</summary>
     public const int SupplierId = 1;
 
+    /// <summary>An <see cref="Order" /> (DDD-style read-only collection) with two lines.</summary>
+    public const int OrderWithLinesId = 1;
+
+    /// <summary>An <see cref="Order" /> with no lines.</summary>
+    public const int OrderWithoutLinesId = 2;
+
     public TestDatabaseFixture()
     {
         var dir = Path.Combine(FindTestProjectDirectory(), "TestDb");
@@ -114,6 +120,11 @@ public sealed class TestDatabaseFixture : IDisposable
                 new Product { Name = "Rocket Skates" },
             ],
         });
+        var order = new Order { Id = OrderWithLinesId, Reference = "ORD-1" };
+        order.AddLine("Widget", 2);
+        order.AddLine("Gadget", 1);
+        context.Orders.Add(order);
+        context.Orders.Add(new Order { Id = OrderWithoutLinesId, Reference = "ORD-2" });
         context.SaveChanges();
     }
 

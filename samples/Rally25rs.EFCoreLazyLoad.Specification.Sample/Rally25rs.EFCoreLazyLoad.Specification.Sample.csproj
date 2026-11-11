@@ -12,7 +12,7 @@
     <!-- Ardalis.Specification 9.x runs on EF Core 10; it only requires EF Core 9.0.8 or later. -->
     <PackageReference Include="Ardalis.Specification" Version="9.3.1" />
     <PackageReference Include="Ardalis.Specification.EntityFrameworkCore" Version="9.3.1" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.15" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="$(EFCoreTestVersion)" />
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.15" />
   </ItemGroup>
 
