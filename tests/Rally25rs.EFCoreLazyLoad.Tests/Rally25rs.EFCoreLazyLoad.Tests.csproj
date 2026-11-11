@@ -28,6 +28,8 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.15" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.15" />
+    <PackageReference Include="Microsoft.Extensions.Logging" Version="10.0.15" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.13.0" />
     <PackageReference Include="xunit.v3" Version="3.0.0" />
     <PackageReference Include="xunit.runner.visualstudio" Version="3.1.2" />
@@ -35,6 +37,10 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Rally25rs.EFCoreLazyLoad\Rally25rs.EFCoreLazyLoad.csproj" />
+    <!-- Consumers get the generator from the package's analyzers folder; here it is wired up directly. -->
+    <ProjectReference Include="..\..\src\Rally25rs.EFCoreLazyLoad.Generators\Rally25rs.EFCoreLazyLoad.Generators.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
   </ItemGroup>
 
 </Project>

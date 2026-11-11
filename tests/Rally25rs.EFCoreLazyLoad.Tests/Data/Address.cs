@@ -1,6 +1,7 @@
 namespace Rally25rs.EFCoreLazyLoad.Tests.Data;
 
-public class Address
+[LazyLoad]
+public partial class Address
 {
     public int Id { get; set; }
     public int CustomerId { get; set; }
@@ -8,5 +9,5 @@ public class Address
     public required string City { get; set; }
     public required string PostalCode { get; set; }
 
-    public Customer? Customer { get; set; }
+    public partial Customer Customer { get; set; }
 }

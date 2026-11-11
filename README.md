@@ -4,18 +4,143 @@ An extension for Entity Framework Core that lets you **optionally lazy-load enti
 
 ## Why
 
-EF Core leaves a navigation property as `null` (or empty) unless you explicitly load it with `Include`. That is good for performance and predictability, but it makes it easy to forget an `Include` and end up with missing data, or to be surprised by lazy loading in code that should have loaded everything up front.
+EF Core leaves a navigation property as `null` unless you explicitly load it with `Include`. Your entity classes usually declare those navigations as non-nullable (`public Address Address { get; set; }`), so the compiler and IntelliSense assume they always have a value. Forget an `Include` and you get a `NullReferenceException` at runtime, often far away from the query that caused it.
 
-This package gives you control over that behavior:
+This package makes those navigations behave the way their types say they do:
 
-- **Optional lazy loading** — opt in to loading a relation on demand when it is accessed and has not been loaded yet.
-- **Detection** — find out when code needed a relation that was not loaded, and either **log** it or **throw an error**, so missing `Include`s are caught instead of silently returning incomplete data.
+- **Lazy-load mode**: an unloaded navigation is loaded from the database the first time you read it, so it is never unexpectedly `null`.
+- **Throw mode**: reading an unloaded navigation throws a clear `NavigationNotLoadedException` that names the entity and navigation, instead of returning `null`.
+- **Logging**: optionally log every time a navigation had to be lazy-loaded (or was blocked), so you can track down and add the missing `Include`s.
 
 ## Requirements
 
-- .NET 10
+- .NET 10 (C# 14)
 - Entity Framework Core 10
 
-## Status
+## Getting started
 
-This package is under active development and is not yet published. Installation and usage instructions will be added here as the API takes shape.
+### 1. Install the package
+
+```shell
+dotnet add package Rally25rs.EFCoreLazyLoad
+```
+
+### 2. Mark your entities
+
+Add `[LazyLoad]` to the entity class, make the class `partial`, and declare its navigation properties as `partial` without a body. The package implements them for you.
+
+```csharp
+using Rally25rs.EFCoreLazyLoad;
+
+[LazyLoad]
+public partial class Customer
+{
+    public int Id { get; set; }
+    public required string Name { get; set; }
+
+    public partial Address Address { get; set; }        // one-to-one
+    public partial List<Hobby> Hobbies { get; set; }    // one-to-many
+}
+
+[LazyLoad]
+public partial class Hobby
+{
+    public int Id { get; set; }
+    public int CustomerId { get; set; }
+    public required string Name { get; set; }
+
+    public partial Customer Customer { get; set; }
+}
+```
+
+Regular properties in the class are left alone. To opt in only some navigations, put `[LazyLoad]` on those properties instead of on the class (the class must still be `partial`).
+
+### 3. Enable it on your DbContext
+
+```csharp
+using Rally25rs.EFCoreLazyLoad;
+
+builder.Services.AddDbContext<AppDbContext>(options => options
+    .UseSqlServer(connectionString)
+    .UseLazyLoad(lazy =>
+    {
+        lazy.Mode = LazyLoadMode.Load;  // or LazyLoadMode.Throw
+        lazy.LogLazyLoads = true;
+    }));
+```
+
+It also works with `AddDbContextPool` and with contexts you configure in `OnConfiguring`.
+
+### 4. Use your entities
+
+```csharp
+var customer = await db.Customers.SingleAsync(c => c.Id == id); // no Include
+
+var city = customer.Address.City; // Load mode: Address is loaded here, not null
+```
+
+## Configuration
+
+| Option | Default | Description |
+|---|---|---|
+| `Mode` | `LazyLoadMode.Load` | `Load`: load unloaded navigations from the database on first access. `Throw`: throw `NavigationNotLoadedException` instead, without querying the database. |
+| `LogLazyLoads` | `false` | Log a message each time a navigation is lazy-loaded (or blocked in `Throw` mode). |
+| `LogLevel` | `LogLevel.Warning` | The level those messages are logged at. |
+| `LoggerFactory` | `null` | The logger factory to write to. When not set, the application's `ILoggerFactory` is used (the one registered in your service collection when you use `AddDbContext`). |
+
+### Configuring through dependency injection
+
+You can register the options once in your service collection, and apply them to one or more contexts:
+
+```csharp
+builder.Services.AddEFCoreLazyLoad(lazy =>
+{
+    lazy.Mode = builder.Environment.IsDevelopment() ? LazyLoadMode.Throw : LazyLoadMode.Load;
+    lazy.LogLazyLoads = true;
+});
+
+builder.Services.AddDbContext<AppDbContext>((serviceProvider, options) => options
+    .UseSqlServer(connectionString)
+    .UseLazyLoad(serviceProvider));
+```
+
+A common setup is `Throw` in development and tests, so missing `Include`s fail fast, and `Load` with logging in production, so users never see an error while you collect the missing `Include`s from your logs.
+
+### Logging
+
+Messages are written under the logger category `Rally25rs.EFCoreLazyLoad`:
+
+| Event ID | Name | When |
+|---|---|---|
+| 1 | `LazyLoad` | A navigation was lazy-loaded (`Load` mode). |
+| 2 | `LazyLoadBlocked` | A lazy load was blocked and an exception thrown (`Throw` mode). |
+
+Each message names the entity type and navigation, for example `Lazy-loading navigation 'Customer.Address'`, so you know which `Include` to add.
+
+If you create your `DbContext` with `new` rather than through dependency injection, set `LoggerFactory` (or call EF Core's `UseLoggerFactory`) so the messages have somewhere to go.
+
+## Behavior notes
+
+- **Lazy loading is synchronous.** Reading a navigation property that needs loading runs a blocking database query. That keeps your code simple, but loading inside a loop issues one query per item (the "N+1" problem). Use the log messages to find these spots and replace them with `Include`.
+- **Loaded navigations are never re-queried.** Navigations loaded with `Include`, loaded explicitly, or already lazy-loaded are returned directly.
+- **Empty collections** are loaded as an empty list, not `null`.
+- **No-tracking queries** (`AsNoTracking`, `AsNoTrackingWithIdentityResolution`) are supported.
+- **The context must still be alive.** Reading an unloaded navigation after its `DbContext` was disposed (or returned to the pool) throws EF Core's standard `InvalidOperationException`.
+- **Turning it off temporarily:** setting `context.ChangeTracker.LazyLoadingEnabled = false` disables lazy loading and `Throw` mode for that context. Unloaded navigations then return `null`.
+- **Without `UseLazyLoad`**, entities marked with `[LazyLoad]` fall back to EF Core's built-in lazy loading: they lazy-load, but you get no `Throw` mode and none of this package's logging.
+- **Serialization:** the lazy-loading plumbing added to your entities is ignored by `System.Text.Json`. Serializing an entity reads its navigations, which lazy-loads them (or throws in `Throw` mode), so consider serializing DTOs rather than entities.
+
+## Compiler diagnostics
+
+The package reports build errors when an entity is not set up correctly:
+
+| ID | Problem |
+|---|---|
+| EFLL001 | A `[LazyLoad]` class (or a class containing it) is not `partial`. |
+| EFLL002 | A `[LazyLoad]` property is not `partial`, or is not a declaration without a body. |
+| EFLL003 | A `[LazyLoad]` property already has an implementation. |
+| EFLL004 | A `[LazyLoad]` property is a value type. Only navigations to entities and collections can be lazy-loaded. |
+| EFLL005 | A `[LazyLoad]` property has no getter. |
+| EFLL006 | A `[LazyLoad]` property is static or an indexer. |
+| EFLL007 | A base class has a lazy-loader member that is not accessible from the derived class. |
+| EFLL008 | The project's C# language version is older than 14. |

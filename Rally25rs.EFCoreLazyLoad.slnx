@@ -1,8 +1,10 @@
 <Solution>
   <Folder Name="/src/">
+    <Project Path="src/Rally25rs.EFCoreLazyLoad.Generators/Rally25rs.EFCoreLazyLoad.Generators.csproj" />
     <Project Path="src/Rally25rs.EFCoreLazyLoad/Rally25rs.EFCoreLazyLoad.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/Rally25rs.EFCoreLazyLoad.Generators.Tests/Rally25rs.EFCoreLazyLoad.Generators.Tests.csproj" />
     <Project Path="tests/Rally25rs.EFCoreLazyLoad.Tests/Rally25rs.EFCoreLazyLoad.Tests.csproj" />
   </Folder>
 </Solution>

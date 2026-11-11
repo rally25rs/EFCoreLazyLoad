@@ -4,10 +4,57 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <!-- EF1001: this library deliberately builds on EF Core's "pubternal" lazy-loading types
+         (LazyLoader, ILazyLoaderFactory). The EF Core dependency is pinned to the 10.x line below. -->
+    <NoWarn>$(NoWarn);EF1001</NoWarn>
+  </PropertyGroup>
+
+  <PropertyGroup Label="Package">
+    <IsPackable>true</IsPackable>
+    <PackageId>Rally25rs.EFCoreLazyLoad</PackageId>
+    <Authors>Rally25rs</Authors>
+    <Description>Optional lazy loading for EF Core navigations without proxies, driven by a source generator over C# partial properties. Can also log, or throw, when a navigation is accessed without having been loaded up front.</Description>
+    <PackageTags>efcore;entityframeworkcore;lazy-loading;include;n+1;source-generator</PackageTags>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <RepositoryType>git</RepositoryType>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.15" />
+    <None Include="..\..\README.md" Pack="true" PackagePath="\" Visible="false" />
   </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="[10.0.15, 11.0)" />
+  </ItemGroup>
+
+  <!--
+  The source generator ships inside this package (analyzers/dotnet/cs) rather than as its own package.
+  The reference only makes sure it is built first; it is not referenced as an assembly, and PrivateAssets
+  keeps it from becoming a package dependency.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\Rally25rs.EFCoreLazyLoad.Generators\Rally25rs.EFCoreLazyLoad.Generators.csproj"
+                      ReferenceOutputAssembly="false"
+                      PrivateAssets="all" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetsForTfmSpecificContentInPackage>$(TargetsForTfmSpecificContentInPackage);_PackSourceGenerator</TargetsForTfmSpecificContentInPackage>
+  </PropertyGroup>
+
+  <Target Name="_PackSourceGenerator">
+    <MSBuild Projects="..\Rally25rs.EFCoreLazyLoad.Generators\Rally25rs.EFCoreLazyLoad.Generators.csproj"
+             Targets="GetTargetPath"
+             Properties="Configuration=$(Configuration)"
+             RemoveProperties="TargetFramework;RuntimeIdentifier">
+      <Output TaskParameter="TargetOutputs" ItemName="_SourceGeneratorAssembly" />
+    </MSBuild>
+    <ItemGroup>
+      <TfmSpecificPackageFile Include="@(_SourceGeneratorAssembly)" PackagePath="analyzers/dotnet/cs" />
+    </ItemGroup>
+  </Target>
 
 </Project>
