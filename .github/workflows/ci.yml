@@ -1,0 +1,79 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  # Reused by publish.yml so a release is built, tested and packed exactly like CI.
+  workflow_call:
+    inputs:
+      version:
+        description: Package version (SemVer). Empty uses the project's default version.
+        type: string
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+concurrency:
+  # Superseded PR runs are cancelled; pushes to main and releases always run to completion.
+  group: ci-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  VERSION: ${{ inputs.version }}
+
+jobs:
+  build:
+    name: Build, test and pack
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      # No lock files in the repo, so the cache is keyed on the project files that declare package versions.
+      - name: Cache NuGet packages
+        uses: actions/cache@v6
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/Directory.*.props', 'global.json') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      - name: Restore
+        run: dotnet restore
+
+      # Version is passed to the build (not just the pack) so the assembly versions of the library and the
+      # bundled generator match the package version.
+      - name: Build
+        run: dotnet build --no-restore -c Release ${VERSION:+-p:Version=$VERSION}
+
+      - name: Test
+        run: dotnet test --no-build -c Release --logger trx --results-directory TestResults
+
+      - name: Upload test results
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-results
+          path: TestResults/**/*.trx
+          if-no-files-found: warn
+
+      - name: Pack
+        run: >-
+          dotnet pack src/Rally25rs.EFCoreLazyLoad --no-build -c Release -o artifacts/packages
+          -p:RepositoryUrl=${{ github.server_url }}/${{ github.repository }}
+          ${VERSION:+-p:Version=$VERSION}
+
+      - name: Upload package
+        uses: actions/upload-artifact@v7
+        with:
+          name: nupkg
+          path: artifacts/packages/*.nupkg
+          if-no-files-found: error
