@@ -1,6 +1,7 @@
 <Solution>
   <Folder Name="/samples/">
     <Project Path="samples/Rally25rs.EFCoreLazyLoad.Sample/Rally25rs.EFCoreLazyLoad.Sample.csproj" />
+    <Project Path="samples/Rally25rs.EFCoreLazyLoad.Specification.Sample/Rally25rs.EFCoreLazyLoad.Specification.Sample.csproj" />
   </Folder>
   <Folder Name="/src/">
     <Project Path="src/Rally25rs.EFCoreLazyLoad.Generators/Rally25rs.EFCoreLazyLoad.Generators.csproj" />
@@ -8,6 +9,7 @@
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Rally25rs.EFCoreLazyLoad.Generators.Tests/Rally25rs.EFCoreLazyLoad.Generators.Tests.csproj" />
+    <Project Path="tests/Rally25rs.EFCoreLazyLoad.Specification.Tests/Rally25rs.EFCoreLazyLoad.Specification.Tests.csproj" />
     <Project Path="tests/Rally25rs.EFCoreLazyLoad.Tests/Rally25rs.EFCoreLazyLoad.Tests.csproj" />
   </Folder>
 </Solution>

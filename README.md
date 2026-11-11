@@ -144,6 +144,50 @@ Each message names the entity type and navigation, for example `Lazy-loading nav
 
 If you create your `DbContext` with `new` rather than through dependency injection, set `LoggerFactory` (or call EF Core's `UseLoggerFactory`) so the messages have somewhere to go.
 
+## Using with Ardalis.Specification
+
+The package works with [Ardalis.Specification](https://specification.ardalis.com/) (`Ardalis.Specification` and `Ardalis.Specification.EntityFrameworkCore`, version 9.x, which runs on EF Core 10). Nothing about your specifications or repositories changes: enable `UseLazyLoad` on the context, and every entity a specification returns gets lazy loading, `Throw` mode and logging.
+
+```csharp
+builder.Services.AddDbContext<AppDbContext>(options => options
+    .UseSqlServer(connectionString)
+    .UseLazyLoad(lazy =>
+    {
+        lazy.Mode = LazyLoadMode.Load;
+        lazy.LogLazyLoads = true;
+    }));
+
+builder.Services.AddScoped(typeof(IReadRepositoryBase<>), typeof(Repository<>));
+builder.Services.AddScoped(typeof(IRepositoryBase<>), typeof(Repository<>));
+
+public class Repository<T>(AppDbContext db) : RepositoryBase<T>(db), IRepositoryBase<T>
+    where T : class;
+```
+
+A specification's `Include` and `ThenInclude` work as usual. When a specification forgets one, reading that navigation follows the context's mode:
+
+```csharp
+public sealed class OrderWithLinesSpec : SingleResultSpecification<Order>
+{
+    public OrderWithLinesSpec(int id)
+        => Query
+            .Where(o => o.Id == id)
+            .Include(o => o.Lines);   // no .ThenInclude(l => l.Product)
+}
+
+var order = await repository.SingleOrDefaultAsync(new OrderWithLinesSpec(id));
+
+var lines = order!.Lines;           // included: returned as-is, no query
+var name = lines[0].Product.Name;   // Load mode: loaded now, and logged as 'OrderLine.Product'
+                                    // Throw mode: throws NavigationNotLoadedException
+```
+
+- **Find the missing Includes.** With `LogLazyLoads` on, each lazy load is logged with the entity and navigation it loaded, so you know which specification needs an `Include` or `ThenInclude`. In `Throw` mode, the exception names it too. A specification that returns a list and is missing an `Include` lazy-loads once per entity, so the log shows one message per entity.
+- **No-tracking specifications** (`Query.AsNoTracking()` and `Query.AsNoTrackingWithIdentityResolution()`) behave the same way.
+- **Projections** (`Specification<T, TResult>` with `Query.Select(...)`) need no `Include`s. Navigations you read inside `Select` are part of the query, so nothing is lazy-loaded or blocked. If a projection returns entities (for example `Select(o => o.Customer)`), those entities lazy-load or throw like any other.
+- **Per-entity settings** from `[LazyLoad(...)]` apply to entities returned by specifications, too.
+- **`WithSpecification`** on a `DbSet` or `IQueryable` behaves the same as the repository methods.
+
 ## Behavior notes
 
 - **Lazy loading is synchronous.** Reading a navigation property that needs loading runs a blocking database query. This is the same as EF Core's own built-in [lazy loading](https://learn.microsoft.com/en-us/ef/core/querying/related-data/lazy), which this package builds on. Property getters can't be awaited, so neither implementation can load asynchronously. It keeps your code simple, but loading inside a loop issues one query per item (the "N+1" problem), which Microsoft warns about in [Beware of lazy loading](https://learn.microsoft.com/en-us/ef/core/performance/efficient-querying#beware-of-lazy-loading). Use the log messages to find these spots and replace them with `Include`.

@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Ardalis.Specification 9.x runs on EF Core 10; it only requires EF Core 9.0.8 or later. -->
+    <PackageReference Include="Ardalis.Specification" Version="9.3.1" />
+    <PackageReference Include="Ardalis.Specification.EntityFrameworkCore" Version="9.3.1" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.15" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.15" />
+  </ItemGroup>
+
+  <!--
+  In your own app, just reference the package:
+    <PackageReference Include="Rally25rs.EFCoreLazyLoad" Version="..." />
+  It brings the source generator along in its analyzers folder. Inside this repo the two halves are
+  referenced directly: the runtime library as a normal reference, and the generator as an analyzer.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Rally25rs.EFCoreLazyLoad\Rally25rs.EFCoreLazyLoad.csproj" />
+    <ProjectReference Include="..\..\src\Rally25rs.EFCoreLazyLoad.Generators\Rally25rs.EFCoreLazyLoad.Generators.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+</Project>

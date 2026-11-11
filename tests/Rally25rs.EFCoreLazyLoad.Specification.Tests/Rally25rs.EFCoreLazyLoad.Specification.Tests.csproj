@@ -1,0 +1,53 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>Rally25rs.EFCoreLazyLoad.Specification.Tests</RootNamespace>
+    <TargetFramework>net10.0</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Content Include="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
+    Ardalis.Specification 9.x targets net8.0/net9.0 and needs EF Core >= 9.0.8, so on net10.0 it resolves against
+    the EF Core 10 referenced here and never pulls in EF Core 11.
+    -->
+    <PackageReference Include="Ardalis.Specification" Version="9.3.1" />
+    <PackageReference Include="Ardalis.Specification.EntityFrameworkCore" Version="9.3.1" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.15" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.15" />
+    <PackageReference Include="Microsoft.Extensions.Logging" Version="10.0.15" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.13.0" />
+    <PackageReference Include="xunit.v3" Version="3.0.0" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Rally25rs.EFCoreLazyLoad\Rally25rs.EFCoreLazyLoad.csproj" />
+    <!-- Consumers get the generator from the package's analyzers folder; here it is wired up directly. -->
+    <ProjectReference Include="..\..\src\Rally25rs.EFCoreLazyLoad.Generators\Rally25rs.EFCoreLazyLoad.Generators.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+  <!--
+  Shares the core integration tests' entities, seed data and test support (TestHost, SqlCapture, LogCapture) by
+  compiling the same source files into this assembly, so both projects test against an identical model without
+  this one referencing a test project. The fixture finds this project's directory, so this project gets its own
+  database file (TestDb/test.db here), and the two test projects can run in parallel.
+  -->
+  <ItemGroup>
+    <Compile Include="..\Rally25rs.EFCoreLazyLoad.Tests\Data\*.cs" Link="Shared\Data\%(Filename)%(Extension)" />
+    <Compile Include="..\Rally25rs.EFCoreLazyLoad.Tests\Support\*.cs" Link="Shared\Support\%(Filename)%(Extension)" />
+  </ItemGroup>
+
+</Project>
