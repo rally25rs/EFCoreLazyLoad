@@ -84,7 +84,10 @@ internal sealed record PropertyModel(
     string Name,
     bool IsNullable,
     AccessorModel Getter,
-    AccessorModel? Setter);
+    AccessorModel? Setter,
+    // Set for a get-only property over a declared backing field (e.g. `_lines`): the expression the getter
+    // returns after asking the loader to load. Null for the usual `field`-backed property.
+    string? BackingFieldReturn = null);
 
 internal sealed record TypeModel(
     string HintName,

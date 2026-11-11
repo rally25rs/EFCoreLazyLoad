@@ -79,6 +79,8 @@ public sealed class LazyLoadGenerator : IIncrementalGenerator
         "EFLL005" => Diagnostics.PropertyHasNoGetter,
         "EFLL006" => Diagnostics.PropertyNotInstance,
         "EFLL007" => Diagnostics.InheritedLoaderInaccessible,
+        "EFLL009" => Diagnostics.BackingFieldIncompatible,
+        "EFLL010" => Diagnostics.BackingFieldPropertyNotPartial,
         _ => Diagnostics.LanguageVersionTooLow,
     };
 }

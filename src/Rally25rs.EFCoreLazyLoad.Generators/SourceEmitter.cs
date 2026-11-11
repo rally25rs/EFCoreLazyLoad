@@ -56,6 +56,21 @@ internal static class SourceEmitter
                 .AppendLine(property.Name);
             sb.Append(pad).AppendLine("{");
 
+            if (property.BackingFieldReturn is not null)
+            {
+                // Get-only over a declared backing field: EF fills the field; we only trigger the load.
+                sb.Append(pad).Append("    ");
+                AppendAccessorModifiers(sb, property.Getter);
+                sb.AppendLine("get");
+                sb.Append(pad).AppendLine("    {");
+                sb.Append(pad).Append("        ").Append(model.LoaderMemberName).Append("?.Load(this, nameof(")
+                    .Append(property.Name).AppendLine("));");
+                sb.Append(pad).Append("        return ").Append(property.BackingFieldReturn).AppendLine(";");
+                sb.Append(pad).AppendLine("    }");
+                sb.Append(pad).AppendLine("}");
+                continue;
+            }
+
             // The `field` backing store is inferred nullable (the getter tolerates null), so a
             // non-nullable navigation only needs `!` on the returned value.
             sb.Append(pad).Append("    ");

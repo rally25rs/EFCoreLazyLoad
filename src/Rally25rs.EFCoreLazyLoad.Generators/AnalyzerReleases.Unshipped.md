@@ -13,3 +13,5 @@ EFLL005 | EFCoreLazyLoad | Error | Lazy-loaded property must have a getter
 EFLL006 | EFCoreLazyLoad | Error | Lazy-loaded property must be an instance, non-indexer property
 EFLL007 | EFCoreLazyLoad | Error | Inherited ILazyLoader member is not accessible
 EFLL008 | EFCoreLazyLoad | Error | [LazyLoad] requires C# 14 or later
+EFLL009 | EFCoreLazyLoad | Error | Backing field type is not compatible with the lazy-loaded property
+EFLL010 | EFCoreLazyLoad | Warning | Collection over a backing field will not be lazy-loaded
