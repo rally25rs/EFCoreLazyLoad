@@ -53,6 +53,13 @@ Rejected alternatives:
 - Test: `dotnet test`
 - Pack: `dotnet pack src/Rally25rs.EFCoreLazyLoad -o <dir>`
 
+## CI and releasing
+
+- `.github/workflows/ci.yml` runs on PRs to `main` and pushes to `main`: restore, build, test (TRX results uploaded as the `test-results` artifact), and a pack smoke check (the `nupkg` artifact).
+- **To release**, publish a GitHub release with a tag `vX.Y.Z` (prereleases like `vX.Y.Z-beta.1` are fine). `.github/workflows/publish.yml` takes the version from the tag (leading `v` stripped; a non-SemVer tag fails the run), runs CI with `-p:Version=<version>`, pushes the package to GitHub Packages (`https://nuget.pkg.github.com/<owner>/index.json`), and attaches the nupkg to the release. The csproj has no version; don't add one.
+- `RepositoryUrl` is passed by the workflow (`-p:RepositoryUrl=<server>/<repo>`) so the package links to the repo in GitHub Packages.
+- Consumers of the GitHub Packages feed authenticate with a PAT that has `read:packages`, added via `dotnet nuget add source <feed url> --name github --username <user> --password <PAT>` (or a `nuget.config`).
+
 ## Conventions
 
 - **README.md is consumer-facing only.** It covers the purpose and usage of the package. Do not put implementation details, technical decisions, or contributor notes in it; those belong in this file or in code comments. Keep it in sync when the public API, options, log events or diagnostics change.
