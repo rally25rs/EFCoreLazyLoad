@@ -61,6 +61,74 @@ public class GenerationTests
     }
 
     [Fact]
+    public void AttributeSettings_DoNotChangeGeneratedCode()
+    {
+        // Mode / LogLazyLoads / LogLevel are read at runtime; the generated code is identical with or without them.
+        const string plain = $$"""
+            using System.Collections.Generic;
+            using Rally25rs.EFCoreLazyLoad;
+
+            namespace Shop;
+
+            {{RelatedTypes}}
+
+            [LazyLoad]
+            public partial class Customer
+            {
+                public partial Address Address { get; set; }
+                public partial List<Hobby> Hobbies { get; set; }
+            }
+            """;
+        const string withSettings = $$"""
+            using System.Collections.Generic;
+            using Microsoft.Extensions.Logging;
+            using Rally25rs.EFCoreLazyLoad;
+
+            namespace Shop;
+
+            {{RelatedTypes}}
+
+            [LazyLoad(Mode = LazyLoadMode.Throw, LogLazyLoads = true)]
+            public partial class Customer
+            {
+                [LazyLoad(Mode = LazyLoadMode.Load, LogLevel = LogLevel.Information)]
+                public partial Address Address { get; set; }
+                public partial List<Hobby> Hobbies { get; set; }
+            }
+            """;
+
+        var expected = GeneratorHarness.RunClean(plain).GeneratedSource("Shop.Customer.LazyLoad.g.cs");
+        var actual = GeneratorHarness.RunClean(withSettings).GeneratedSource("Shop.Customer.LazyLoad.g.cs");
+
+        Assert.Equal(expected, actual);
+    }
+
+    [Fact]
+    public void PropertyLevelAttributeWithSettings_OnlyImplementsMarkedProperties()
+    {
+        var result = GeneratorHarness.RunClean($$"""
+            using System.Collections.Generic;
+            using Rally25rs.EFCoreLazyLoad;
+
+            namespace Shop;
+
+            {{RelatedTypes}}
+
+            public partial class Customer
+            {
+                [LazyLoad(Mode = LazyLoadMode.Throw)]
+                public partial Address Address { get; set; }
+
+                public List<Hobby> Hobbies { get; set; } = [];
+            }
+            """);
+
+        var source = result.GeneratedSource("Shop.Customer.LazyLoad.g.cs");
+        Assert.Contains("nameof(Address)", source);
+        Assert.DoesNotContain("Hobbies", source);
+    }
+
+    [Fact]
     public void PropertyLevelAttribute_OnlyImplementsMarkedProperties()
     {
         var result = GeneratorHarness.RunClean($$"""

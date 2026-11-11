@@ -7,7 +7,8 @@ using Microsoft.Extensions.Logging;
 namespace Rally25rs.EFCoreLazyLoad.Internal;
 
 /// <summary>
-///     EF Core <see cref="LazyLoader" /> that applies <see cref="LazyLoadOptions" /> (log / throw) before deferring to
+///     EF Core <see cref="LazyLoader" /> that applies <see cref="LazyLoadOptions" />, with any per-entity
+///     <see cref="LazyLoadAttribute" /> overrides (log / throw), before deferring to
 ///     the base implementation, which keeps EF's reentrancy guard, no-tracking support and disposed-context handling.
 /// </summary>
 internal sealed class LazyLoadLazyLoader(
@@ -23,12 +24,9 @@ internal sealed class LazyLoadLazyLoader(
     // progress (recursion from within EF, or another thread) skip our checks and let base wait / dedupe.
     private HashSet<string>? _inProgress;
 
-    private bool Intercepts
-        => options.Mode == LazyLoadMode.Throw || options.LogLazyLoads;
-
     public override void Load(object entity, string navigationName = "")
     {
-        if (!Intercepts || entity is null || string.IsNullOrEmpty(navigationName) || !TryBegin(navigationName))
+        if (!TryGetSettings(entity, navigationName, out var settings) || !TryBegin(navigationName))
         {
             base.Load(entity!, navigationName);
             return;
@@ -36,7 +34,7 @@ internal sealed class LazyLoadLazyLoader(
 
         try
         {
-            BeforeLoad(entity, navigationName);
+            BeforeLoad(entity, navigationName, settings);
             base.Load(entity, navigationName);
         }
         finally
@@ -50,7 +48,7 @@ internal sealed class LazyLoadLazyLoader(
         CancellationToken cancellationToken = default,
         string navigationName = "")
     {
-        if (!Intercepts || entity is null || string.IsNullOrEmpty(navigationName) || !TryBegin(navigationName))
+        if (!TryGetSettings(entity, navigationName, out var settings) || !TryBegin(navigationName))
         {
             await base.LoadAsync(entity!, cancellationToken, navigationName).ConfigureAwait(false);
             return;
@@ -58,7 +56,7 @@ internal sealed class LazyLoadLazyLoader(
 
         try
         {
-            BeforeLoad(entity, navigationName);
+            BeforeLoad(entity, navigationName, settings);
             await base.LoadAsync(entity, cancellationToken, navigationName).ConfigureAwait(false);
         }
         finally
@@ -67,7 +65,23 @@ internal sealed class LazyLoadLazyLoader(
         }
     }
 
-    private void BeforeLoad(object entity, string navigationName)
+    /// <summary>
+    ///     The context's options with the navigation's <see cref="LazyLoadAttribute" /> overrides applied. Returns
+    ///     <see langword="false" /> when the load needs none of our handling and can go straight to EF.
+    /// </summary>
+    private bool TryGetSettings(object? entity, string navigationName, out EffectiveSettings settings)
+    {
+        if (entity is null || string.IsNullOrEmpty(navigationName))
+        {
+            settings = default;
+            return false;
+        }
+
+        settings = EffectiveSettings.From(options, NavigationSettings.GetOverrides(entity.GetType(), navigationName));
+        return settings.Intercepts;
+    }
+
+    private void BeforeLoad(object entity, string navigationName, EffectiveSettings settings)
     {
         if (!WouldLoad(entity, navigationName))
         {
@@ -75,19 +89,19 @@ internal sealed class LazyLoadLazyLoader(
         }
 
         var entityType = entity.GetType();
-        if (options.Mode == LazyLoadMode.Throw)
+        if (settings.Mode == LazyLoadMode.Throw)
         {
-            if (options.LogLazyLoads)
+            if (settings.LogLazyLoads)
             {
-                Log.LazyLoadBlocked(loggerAccessor(), options.LogLevel, TypeNames.Display(entityType), navigationName);
+                Log.LazyLoadBlocked(loggerAccessor(), settings.LogLevel, TypeNames.Display(entityType), navigationName);
             }
 
             throw new NavigationNotLoadedException(entityType, navigationName);
         }
 
-        if (options.LogLazyLoads)
+        if (settings.LogLazyLoads)
         {
-            Log.LazyLoad(loggerAccessor(), options.LogLevel, TypeNames.Display(entityType), navigationName);
+            Log.LazyLoad(loggerAccessor(), settings.LogLevel, TypeNames.Display(entityType), navigationName);
         }
     }
 

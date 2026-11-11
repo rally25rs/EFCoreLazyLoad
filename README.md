@@ -55,6 +55,8 @@ public partial class Hobby
 
 Regular properties in the class are left alone. To opt in only some navigations, put `[LazyLoad]` on those properties instead of on the class (the class must still be `partial`).
 
+You can also override the context's settings for a single entity or navigation. See [Per-entity settings](#per-entity-settings).
+
 ### 3. Enable it on your DbContext
 
 ```csharp
@@ -106,6 +108,29 @@ builder.Services.AddDbContext<AppDbContext>((serviceProvider, options) => option
 
 A common setup is `Throw` in development and tests, so missing `Include`s fail fast, and `Load` with logging in production, so users never see an error while you collect the missing `Include`s from your logs.
 
+### Per-entity settings
+
+`[LazyLoad]` accepts the `Mode`, `LogLazyLoads` and `LogLevel` settings, which override the context's configuration for that entity or navigation:
+
+```csharp
+// Orders must always be queried with their lines: never lazy-load them, even in Load mode.
+[LazyLoad(Mode = LazyLoadMode.Throw)]
+public partial class Order
+{
+    public int Id { get; set; }
+    public partial List<OrderLine> Lines { get; set; }
+
+    // ...except the customer, which may be lazy-loaded, and is logged so the missing Include can be found.
+    [LazyLoad(Mode = LazyLoadMode.Load, LogLazyLoads = true)]
+    public partial Customer Customer { get; set; }
+}
+```
+
+- Only the settings you set are overridden. Anything you leave out follows the context's configuration. For example, `[LazyLoad(LogLazyLoads = true)]` logs that entity's lazy loads but keeps the context's `Mode`.
+- Each setting is decided separately. A setting on the navigation property wins over one on the class, and a setting on a class wins over one on its base classes, which wins over the context's configuration.
+- Settings on a base class apply to derived entity classes too, unless the derived class overrides them.
+- Per-entity settings are only applied when the context uses `UseLazyLoad`. `LoggerFactory` can only be set on the context.
+
 ### Logging
 
 Messages are written under the logger category `Rally25rs.EFCoreLazyLoad`:
@@ -121,7 +146,7 @@ If you create your `DbContext` with `new` rather than through dependency injecti
 
 ## Behavior notes
 
-- **Lazy loading is synchronous.** Reading a navigation property that needs loading runs a blocking database query. That keeps your code simple, but loading inside a loop issues one query per item (the "N+1" problem). Use the log messages to find these spots and replace them with `Include`.
+- **Lazy loading is synchronous.** Reading a navigation property that needs loading runs a blocking database query. This is the same as EF Core's own built-in [lazy loading](https://learn.microsoft.com/en-us/ef/core/querying/related-data/lazy), which this package builds on. Property getters can't be awaited, so neither implementation can load asynchronously. It keeps your code simple, but loading inside a loop issues one query per item (the "N+1" problem), which Microsoft warns about in [Beware of lazy loading](https://learn.microsoft.com/en-us/ef/core/performance/efficient-querying#beware-of-lazy-loading). Use the log messages to find these spots and replace them with `Include`.
 - **Loaded navigations are never re-queried.** Navigations loaded with `Include`, loaded explicitly, or already lazy-loaded are returned directly.
 - **Empty collections** are loaded as an empty list, not `null`.
 - **No-tracking queries** (`AsNoTracking`, `AsNoTrackingWithIdentityResolution`) are supported.

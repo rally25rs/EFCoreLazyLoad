@@ -22,6 +22,9 @@ public sealed class TestDatabaseFixture : IDisposable
     /// <summary>Has an address and no hobbies.</summary>
     public const int CustomerWithoutHobbiesId = 2;
 
+    /// <summary>A <see cref="Supplier" /> with a contact and two products.</summary>
+    public const int SupplierId = 1;
+
     public TestDatabaseFixture()
     {
         var dir = Path.Combine(FindTestProjectDirectory(), "TestDb");
@@ -99,6 +102,17 @@ public sealed class TestDatabaseFixture : IDisposable
                 City = "Shelbyville",
                 PostalCode = "67890",
             },
+        });
+        context.Suppliers.Add(new Supplier
+        {
+            Id = SupplierId,
+            Name = "Acme",
+            Contact = new Contact { Email = "sales@acme.example" },
+            Products =
+            [
+                new Product { Name = "Anvil" },
+                new Product { Name = "Rocket Skates" },
+            ],
         });
         context.SaveChanges();
     }

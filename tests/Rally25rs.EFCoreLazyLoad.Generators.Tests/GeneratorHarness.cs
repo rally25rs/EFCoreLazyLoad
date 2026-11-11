@@ -8,12 +8,25 @@ namespace Rally25rs.EFCoreLazyLoad.Generators.Tests;
 /// <summary>Builds in-memory compilations and runs <see cref="LazyLoadGenerator"/> over them.</summary>
 internal static class GeneratorHarness
 {
-    // Mirrors the attribute shipped in the runtime library; the generator matches it by name only.
+    // Mirrors the attribute shipped in the runtime library (including its optional settings); the generator matches
+    // it by name only. LogLevel is stubbed so the test compilation doesn't need Microsoft.Extensions.Logging.
     public const string AttributeSource = """
+        namespace Microsoft.Extensions.Logging
+        {
+            public enum LogLevel { Trace, Debug, Information, Warning, Error, Critical, None }
+        }
+
         namespace Rally25rs.EFCoreLazyLoad
         {
+            public enum LazyLoadMode { Load, Throw }
+
             [global::System.AttributeUsage(global::System.AttributeTargets.Class | global::System.AttributeTargets.Property, Inherited = false)]
-            public sealed class LazyLoadAttribute : global::System.Attribute { }
+            public sealed class LazyLoadAttribute : global::System.Attribute
+            {
+                public LazyLoadMode Mode { get; set; }
+                public bool LogLazyLoads { get; set; }
+                public global::Microsoft.Extensions.Logging.LogLevel LogLevel { get; set; }
+            }
         }
         """;
 

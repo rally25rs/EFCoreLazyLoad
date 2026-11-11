@@ -108,6 +108,30 @@ await using (var scope = host.Services.CreateAsyncScope())
     }
 }
 
+// ---------------------------------------------------------------------------------------------------------
+Section("4. Per-entity overrides: [LazyLoad(...)] settings beat the context's options");
+// ---------------------------------------------------------------------------------------------------------
+await using (var scope = host.Services.CreateAsyncScope())
+{
+    // The Load-mode context from Option A, with logging on.
+    var db = scope.ServiceProvider.GetRequiredService<BlogDbContext>();
+
+    // Post is marked [LazyLoad(Mode = LazyLoadMode.Throw)], so its Blog is never lazy-loaded.
+    var post = await db.Posts.SingleAsync(p => p.Title == "Hello, world");  // no Include
+    try
+    {
+        Print($"Post blog: {post.Blog.Title}");
+    }
+    catch (NavigationNotLoadedException ex)
+    {
+        Print($"Caught {nameof(NavigationNotLoadedException)} ({ex.EntityType.Name}.{ex.NavigationName}), although the context is in Load mode");
+    }
+
+    // Author.Blog is marked [LazyLoad(LogLazyLoads = false)]: it is lazy-loaded (one query), with no warning.
+    var author = await db.Authors.SingleAsync(a => a.Name == "Ada Lovelace");  // no Include
+    Print($"Author's blog: {author.Blog.Title} (lazy-loaded, not logged)");
+}
+
 Section("Done");
 return;
 
