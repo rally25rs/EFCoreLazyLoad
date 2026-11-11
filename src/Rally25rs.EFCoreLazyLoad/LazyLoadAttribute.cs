@@ -20,7 +20,7 @@ namespace Rally25rs.EFCoreLazyLoad;
 ///     <para>
 ///         How a lazy load behaves (load, log, or throw) is configured for the context with
 ///         <see cref="LazyLoadDbContextOptionsBuilderExtensions.UseLazyLoad(Microsoft.EntityFrameworkCore.DbContextOptionsBuilder, System.Action{LazyLoadOptions}?)" />.
-///         <see cref="Mode" />, <see cref="LogLazyLoads" /> and <see cref="LogLevel" /> override those settings for
+///         <see cref="Mode" />, <see cref="LogLazyLoads" />, <see cref="LogLevel" /> and <see cref="LogStackTrace" /> override those settings for
 ///         the marked entity or navigation. Each one is applied only when it is set; settings that are not set use
 ///         the context's value. When several attributes set the same setting, the one on the navigation property wins,
 ///         then the one on the nearest class in the entity's inheritance hierarchy.
@@ -36,6 +36,7 @@ public sealed class LazyLoadAttribute : Attribute
     private LazyLoadMode? _mode;
     private bool? _logLazyLoads;
     private LogLevel? _logLevel;
+    private bool? _logStackTrace;
 
     /// <summary>
     ///     Overrides <see cref="LazyLoadOptions.Mode" /> for the marked entity or navigation.
@@ -68,6 +69,16 @@ public sealed class LazyLoadAttribute : Attribute
         set => _logLevel = value;
     }
 
+    /// <summary>
+    ///     Overrides <see cref="LazyLoadOptions.LogStackTrace" /> for the marked entity or navigation.
+    ///     When not set, the context's setting is used (reading this property then returns <see langword="true" />).
+    /// </summary>
+    public bool LogStackTrace
+    {
+        get => _logStackTrace ?? true;
+        set => _logStackTrace = value;
+    }
+
     internal LazyLoadMode? ModeOverride
         => _mode;
 
@@ -76,4 +87,7 @@ public sealed class LazyLoadAttribute : Attribute
 
     internal LogLevel? LogLevelOverride
         => _logLevel;
+
+    internal bool? LogStackTraceOverride
+        => _logStackTrace;
 }

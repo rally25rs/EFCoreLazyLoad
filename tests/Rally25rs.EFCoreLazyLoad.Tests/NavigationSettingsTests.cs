@@ -39,6 +39,15 @@ public partial class NavigationSettingsTests
     {
     }
 
+    [LazyLoad(LogStackTrace = false)]
+    public partial class NoStackTrace
+    {
+        public partial Target Nav { get; set; }
+
+        [LazyLoad(LogStackTrace = true)]
+        public partial Target TracedNav { get; set; }
+    }
+
     public partial class PropertyOnly
     {
         [LazyLoad(LogLazyLoads = false)]
@@ -56,6 +65,8 @@ public partial class NavigationSettingsTests
         Assert.Equal(LazyLoadMode.Load, attribute.Mode);
         Assert.False(attribute.LogLazyLoads);
         Assert.Equal(LogLevel.Warning, attribute.LogLevel);
+        Assert.True(attribute.LogStackTrace);
+        Assert.Null(attribute.LogStackTraceOverride);
         Assert.Null(attribute.ModeOverride);
         Assert.Null(attribute.LogLazyLoadsOverride);
         Assert.Null(attribute.LogLevelOverride);
@@ -151,4 +162,22 @@ public partial class NavigationSettingsTests
     [InlineData(LazyLoadMode.Throw, false, true)]
     public void EffectiveSettings_Intercepts_OnlyWhenThrowingOrLogging(LazyLoadMode mode, bool log, bool expected)
         => Assert.Equal(expected, new EffectiveSettings(mode, log, LogLevel.Warning).Intercepts);
+
+    [Fact]
+    public void LogStackTrace_IsResolvedLikeTheOtherSettings()
+    {
+        Assert.Equal(new NavigationOverrides(null, null, null, false), NavigationSettings.GetOverrides(typeof(NoStackTrace), nameof(NoStackTrace.Nav)));
+        Assert.Equal(new NavigationOverrides(null, null, null, true), NavigationSettings.GetOverrides(typeof(NoStackTrace), nameof(NoStackTrace.TracedNav)));
+    }
+
+    [Fact]
+    public void LogStackTrace_DefaultsToTrue_AndFollowsOverrides()
+    {
+        Assert.True(new LazyLoadOptions().LogStackTrace);
+        Assert.True(EffectiveSettings.From(new LazyLoadOptions(), NavigationOverrides.None).LogStackTrace);
+        Assert.False(EffectiveSettings.From(new LazyLoadOptions { LogStackTrace = false }, NavigationOverrides.None).LogStackTrace);
+        Assert.True(EffectiveSettings.From(
+            new LazyLoadOptions { LogStackTrace = false },
+            new NavigationOverrides(null, null, null, true)).LogStackTrace);
+    }
 }

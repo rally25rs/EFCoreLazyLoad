@@ -88,6 +88,7 @@ var city = customer.Address.City; // Load mode: Address is loaded here, not null
 | `Mode` | `LazyLoadMode.Load` | `Load`: load unloaded navigations from the database on first access. `Throw`: throw `NavigationNotLoadedException` instead, without querying the database. |
 | `LogLazyLoads` | `false` | Log a message each time a navigation is lazy-loaded (or blocked in `Throw` mode). |
 | `LogLevel` | `LogLevel.Warning` | The level those messages are logged at. |
+| `LogStackTrace` | `true` | Attach the call stack of the code that read the navigation to each message, so you can find where the lazy load came from. See [Logging](#logging). |
 | `LoggerFactory` | `null` | The logger factory to write to. When not set, the application's `ILoggerFactory` is used (the one registered in your service collection when you use `AddDbContext`). |
 
 ### Configuring through dependency injection
@@ -110,7 +111,7 @@ A common setup is `Throw` in development and tests, so missing `Include`s fail f
 
 ### Per-entity settings
 
-`[LazyLoad]` accepts the `Mode`, `LogLazyLoads` and `LogLevel` settings, which override the context's configuration for that entity or navigation:
+`[LazyLoad]` accepts the `Mode`, `LogLazyLoads`, `LogLevel` and `LogStackTrace` settings, which override the context's configuration for that entity or navigation:
 
 ```csharp
 // Orders must always be queried with their lines: never lazy-load them, even in Load mode.
@@ -141,6 +142,23 @@ Messages are written under the logger category `Rally25rs.EFCoreLazyLoad`:
 | 2 | `LazyLoadBlocked` | A lazy load was blocked and an exception thrown (`Throw` mode). |
 
 Each message names the entity type and navigation, for example `Lazy-loading navigation 'Customer.Address'`, so you know which `Include` to add.
+
+#### Finding where a lazy load came from
+
+With `LogStackTrace` on (the default), each message also carries the call stack of the code that read the navigation. It is attached as the log entry's exception, a `LazyLoadStackTrace`, so your log provider shows it the same way it shows any exception:
+
+```
+warn: Rally25rs.EFCoreLazyLoad[1] Lazy-loading navigation 'OrderLine.Product'. Consider loading it up front with .Include() in the query that loaded the entity.
+      Rally25rs.EFCoreLazyLoad.LazyLoadStackTrace: The navigation 'OrderLine.Product' was accessed from:
+         at Shop.OrderLine.get_Product() in OrderLine.LazyLoad.g.cs:line 21
+         at Shop.InvoiceService.Render(Order order) in InvoiceService.cs:line 42
+         ...
+```
+
+- The stack trace starts at the navigation property, followed by your code that read it. EF Core's and this package's internals are left out.
+- File names and line numbers appear when your app's debugging symbols (`.pdb` files) are deployed, which is the default for both Debug and Release builds.
+- `LazyLoadStackTrace` is never thrown; it only carries the stack trace. Its `EntityType` and `NavigationName` properties identify the navigation. If your monitoring treats every logged exception as an error, set `LogStackTrace = false` for the context, or per entity with `[LazyLoad(LogStackTrace = false)]`.
+- The stack trace is only captured when the message will actually be written (logging enabled at that level).
 
 If you create your `DbContext` with `new` rather than through dependency injection, set `LoggerFactory` (or call EF Core's `UseLoggerFactory`) so the messages have somewhere to go.
 

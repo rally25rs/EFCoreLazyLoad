@@ -89,19 +89,38 @@ internal sealed class LazyLoadLazyLoader(
         }
 
         var entityType = entity.GetType();
-        if (settings.Mode == LazyLoadMode.Throw)
-        {
-            if (settings.LogLazyLoads)
-            {
-                Log.LazyLoadBlocked(loggerAccessor(), settings.LogLevel, TypeNames.Display(entityType), navigationName);
-            }
-
-            throw new NavigationNotLoadedException(entityType, navigationName);
-        }
-
+        var blocked = settings.Mode == LazyLoadMode.Throw;
         if (settings.LogLazyLoads)
         {
-            Log.LazyLoad(loggerAccessor(), settings.LogLevel, TypeNames.Display(entityType), navigationName);
+            WriteLog(entityType, navigationName, settings, blocked);
+        }
+
+        if (blocked)
+        {
+            throw new NavigationNotLoadedException(entityType, navigationName);
+        }
+    }
+
+    private void WriteLog(Type entityType, string navigationName, EffectiveSettings settings, bool blocked)
+    {
+        var logger = loggerAccessor();
+        if (!logger.IsEnabled(settings.LogLevel))
+        {
+            return; // don't pay for a stack trace nobody will see
+        }
+
+        var stackTrace = settings.LogStackTrace
+            ? new LazyLoadStackTrace(entityType, navigationName, CallStack.Capture())
+            : null;
+        var displayName = TypeNames.Display(entityType);
+
+        if (blocked)
+        {
+            Log.LazyLoadBlocked(logger, settings.LogLevel, stackTrace, displayName, navigationName);
+        }
+        else
+        {
+            Log.LazyLoad(logger, settings.LogLevel, stackTrace, displayName, navigationName);
         }
     }
 

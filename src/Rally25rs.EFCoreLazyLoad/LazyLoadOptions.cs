@@ -28,6 +28,14 @@ public sealed class LazyLoadOptions
     public LogLevel LogLevel { get; set; } = LogLevel.Warning;
 
     /// <summary>
+    ///     When <see langword="true" /> (the default), the entries written when <see cref="LogLazyLoads" /> is enabled
+    ///     include the call stack of the code that read the navigation, attached as a <see cref="LazyLoadStackTrace" />
+    ///     exception, so you can find where the lazy load came from. Has no effect unless <see cref="LogLazyLoads" />
+    ///     is enabled.
+    /// </summary>
+    public bool LogStackTrace { get; set; } = true;
+
+    /// <summary>
     ///     An optional logger factory to write lazy-load log entries to. When <see langword="null" /> (the default),
     ///     the <see cref="ILoggerFactory" /> that EF Core uses for the context is used, which is the application's
     ///     logger factory when the context is registered with <c>AddDbContext</c>.
@@ -40,6 +48,7 @@ public sealed class LazyLoadOptions
             Mode = Mode,
             LogLazyLoads = LogLazyLoads,
             LogLevel = LogLevel,
+            LogStackTrace = LogStackTrace,
             LoggerFactory = LoggerFactory,
         };
 }

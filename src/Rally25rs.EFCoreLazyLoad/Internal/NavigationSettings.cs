@@ -8,16 +8,24 @@ namespace Rally25rs.EFCoreLazyLoad.Internal;
 ///     The settings a <see cref="LazyLoadAttribute" /> overrides for one navigation of one CLR type. A
 ///     <see langword="null" /> member means "not overridden; use the context's <see cref="LazyLoadOptions" />".
 /// </summary>
-internal sealed record NavigationOverrides(LazyLoadMode? Mode, bool? LogLazyLoads, LogLevel? LogLevel)
+internal sealed record NavigationOverrides(
+    LazyLoadMode? Mode,
+    bool? LogLazyLoads,
+    LogLevel? LogLevel,
+    bool? LogStackTrace = null)
 {
     public static readonly NavigationOverrides None = new(null, null, null);
 
     public bool IsEmpty
-        => Mode is null && LogLazyLoads is null && LogLevel is null;
+        => Mode is null && LogLazyLoads is null && LogLevel is null && LogStackTrace is null;
 }
 
 /// <summary>The effective settings for one lazy load: the context's options with any attribute overrides applied.</summary>
-internal readonly record struct EffectiveSettings(LazyLoadMode Mode, bool LogLazyLoads, LogLevel LogLevel)
+internal readonly record struct EffectiveSettings(
+    LazyLoadMode Mode,
+    bool LogLazyLoads,
+    LogLevel LogLevel,
+    bool LogStackTrace = true)
 {
     /// <summary>Whether a lazy load needs any of our handling (otherwise it can go straight to EF).</summary>
     public bool Intercepts
@@ -27,7 +35,8 @@ internal readonly record struct EffectiveSettings(LazyLoadMode Mode, bool LogLaz
         => new(
             overrides.Mode ?? options.Mode,
             overrides.LogLazyLoads ?? options.LogLazyLoads,
-            overrides.LogLevel ?? options.LogLevel);
+            overrides.LogLevel ?? options.LogLevel,
+            overrides.LogStackTrace ?? options.LogStackTrace);
 }
 
 /// <summary>
@@ -73,7 +82,8 @@ internal static class NavigationSettings
         var overrides = new NavigationOverrides(
             attributes.Select(a => a.ModeOverride).FirstOrDefault(v => v is not null),
             attributes.Select(a => a.LogLazyLoadsOverride).FirstOrDefault(v => v is not null),
-            attributes.Select(a => a.LogLevelOverride).FirstOrDefault(v => v is not null));
+            attributes.Select(a => a.LogLevelOverride).FirstOrDefault(v => v is not null),
+            attributes.Select(a => a.LogStackTraceOverride).FirstOrDefault(v => v is not null));
 
         return overrides.IsEmpty ? NavigationOverrides.None : overrides;
     }

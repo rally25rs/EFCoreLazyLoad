@@ -13,11 +13,11 @@ internal static partial class Log
         EventId = 1,
         EventName = "LazyLoad",
         Message = "Lazy-loading navigation '{EntityType}.{NavigationName}'. Consider loading it up front with .Include() in the query that loaded the entity.")]
-    public static partial void LazyLoad(ILogger logger, LogLevel level, string entityType, string navigationName);
+    public static partial void LazyLoad(ILogger logger, LogLevel level, Exception? stackTrace, string entityType, string navigationName);
 
     [LoggerMessage(
         EventId = 2,
         EventName = "LazyLoadBlocked",
         Message = "Blocked lazy-load of navigation '{EntityType}.{NavigationName}' because LazyLoadMode is Throw. Load it up front with .Include() in the query that loaded the entity.")]
-    public static partial void LazyLoadBlocked(ILogger logger, LogLevel level, string entityType, string navigationName);
+    public static partial void LazyLoadBlocked(ILogger logger, LogLevel level, Exception? stackTrace, string entityType, string navigationName);
 }

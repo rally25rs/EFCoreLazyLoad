@@ -2,7 +2,7 @@ using Microsoft.Extensions.Logging;
 
 namespace Rally25rs.EFCoreLazyLoad.Tests.Support;
 
-public sealed record LogEntry(string Category, LogLevel Level, EventId EventId, string Message);
+public sealed record LogEntry(string Category, LogLevel Level, EventId EventId, string Message, Exception? Exception = null);
 
 /// <summary>An <see cref="ILoggerProvider" /> that keeps every entry written through it.</summary>
 public sealed class LogCapture : ILoggerProvider
@@ -54,6 +54,6 @@ public sealed class LogCapture : ILoggerProvider
         public void Log<TState>(
             LogLevel logLevel, EventId eventId, TState state, Exception? exception,
             Func<TState, Exception?, string> formatter)
-            => owner.Add(new LogEntry(category, logLevel, eventId, formatter(state, exception)));
+            => owner.Add(new LogEntry(category, logLevel, eventId, formatter(state, exception), exception));
     }
 }

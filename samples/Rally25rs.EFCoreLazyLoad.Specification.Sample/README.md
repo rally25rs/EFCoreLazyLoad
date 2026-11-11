@@ -30,7 +30,7 @@ The app recreates and seeds `shop.db` in its output folder on every run, so it c
 
 ## Expected output
 
-Console logging shows the SQL EF Core runs and the warnings from the `Rally25rs.EFCoreLazyLoad` category.
+Console logging shows the SQL EF Core runs and the warnings from the `Rally25rs.EFCoreLazyLoad` category. Each warning ends with a stack trace (`LazyLoadStackTrace`) pointing at the line in `Program.cs` that read the navigation. The single-line console format puts it on the same line as the warning.
 
 1. **Spec with Include/ThenInclude**: one query loads the order, customer, lines and products. No lazy loading,
    no warnings.

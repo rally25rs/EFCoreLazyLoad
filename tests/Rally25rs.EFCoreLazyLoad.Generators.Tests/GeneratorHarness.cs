@@ -26,6 +26,7 @@ internal static class GeneratorHarness
                 public LazyLoadMode Mode { get; set; }
                 public bool LogLazyLoads { get; set; }
                 public global::Microsoft.Extensions.Logging.LogLevel LogLevel { get; set; }
+                public bool LogStackTrace { get; set; }
             }
         }
         """;
