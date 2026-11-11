@@ -483,3 +483,6 @@ $RECYCLE.BIN/
 
 # SQLite test database (recreated on each test run)
 tests/**/TestDb/
+
+# SQLite database created by the sample app at startup
+samples/**/*.db

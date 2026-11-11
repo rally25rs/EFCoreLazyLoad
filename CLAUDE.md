@@ -38,6 +38,8 @@ Rejected alternatives:
   - `Data/`: test entities (`Customer` 1-to-1 `Address`, `Customer` 1-to-many `Hobby`, all `[LazyLoad] partial` with non-nullable navigations), `TestDbContext`, and `TestDatabaseFixture`.
   - `Support/`: `TestHost` (a fresh DI container and context per test), `SqlCapture` (a command interceptor; `During(action)` returns the SQL run inside it), and `LogCapture`.
 - `tests/Rally25rs.EFCoreLazyLoad.Generators.Tests/`: generator unit tests via `CSharpGeneratorDriver` (output, diagnostics, hierarchy, incremental caching).
+- `samples/`: all demo/sample apps go here, never in `src/` or `tests/`. Samples are `IsPackable=false` and reference the library and generator via ProjectReference, the same way the test project does.
+  - `samples/Rally25rs.EFCoreLazyLoad.Sample/`: a Generic Host console app (Blog/Author/Posts on SQLite). It demonstrates Include, Load mode with warnings, and Throw mode. Run it with `dotnet run --project samples/Rally25rs.EFCoreLazyLoad.Sample`.
 - `README.md`: consumer-facing documentation only (see below).
 
 ## Commands
