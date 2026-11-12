@@ -149,4 +149,47 @@ public class LoggingTests(TestDatabaseFixture db)
 
         Assert.Equal(LazyLoadBlockedEventId, Assert.Single(logs.LazyLoadEntries).EventId.Id);
     }
+
+    [Fact]
+    public async Task UseLazyLoadFromServiceProvider_ForContextCreatedWithNew_LogsToApplicationLogging()
+    {
+        // e.g. a context a message-handling framework creates with `new` from options it builds itself: EF Core has
+        // no application service provider, so it would otherwise log to its own, empty, logger factory.
+        await using var host = db.CreateHost((services, _) => services.AddEFCoreLazyLoad(o => o.LogLazyLoads = true));
+        var options = new DbContextOptionsBuilder<TestDbContext>()
+            .UseSqlite(db.ConnectionString)
+            .UseLazyLoad(host.Services)
+            .Options;
+        await using var context = new TestDbContext(options);
+        var customer = await context.Customers
+            .SingleAsync(c => c.Id == TestDatabaseFixture.CustomerWithHobbiesId, Ct);
+
+        _ = customer.Address;
+
+        Assert.Contains("Customer.Address", Assert.Single(host.Logs.LazyLoadEntries).Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task UseLazyLoadFromServiceProvider_ExplicitLoggerFactory_WinsOverServiceProvider()
+    {
+        var explicitLogs = new LogCapture();
+        using var loggerFactory = LoggerFactory.Create(b => b.AddProvider(explicitLogs).SetMinimumLevel(LogLevel.Trace));
+        await using var host = db.CreateHost((services, _) => services.AddEFCoreLazyLoad(o =>
+        {
+            o.LogLazyLoads = true;
+            o.LoggerFactory = loggerFactory;
+        }));
+        var options = new DbContextOptionsBuilder<TestDbContext>()
+            .UseSqlite(db.ConnectionString)
+            .UseLazyLoad(host.Services)
+            .Options;
+        await using var context = new TestDbContext(options);
+        var customer = await context.Customers
+            .SingleAsync(c => c.Id == TestDatabaseFixture.CustomerWithHobbiesId, Ct);
+
+        _ = customer.Address;
+
+        Assert.Single(explicitLogs.LazyLoadEntries);
+        Assert.Empty(host.Logs.LazyLoadEntries);
+    }
 }

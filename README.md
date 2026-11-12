@@ -25,6 +25,23 @@ This package makes those navigations behave the way their types say they do:
 dotnet add package Rally25rs.EFCoreLazyLoad
 ```
 
+The package is published to GitHub Packages. Add the feed once, with a personal access token that has the `read:packages` scope:
+
+```shell
+dotnet nuget add source https://nuget.pkg.github.com/rally25rs/index.json --name github --username <github user> --password <token>
+```
+
+If your repository uses [package source mapping](https://learn.microsoft.com/en-us/nuget/consume-packages/package-source-mapping), map the package to that feed in your `nuget.config`:
+
+```xml
+<packageSourceMapping>
+  <packageSource key="github">
+    <package pattern="Rally25rs.EFCoreLazyLoad" />
+  </packageSource>
+  <!-- your existing nuget.org mapping -->
+</packageSourceMapping>
+```
+
 ### 2. Mark your entities
 
 Add `[LazyLoad]` to the entity class, make the class `partial`, and declare its navigation properties as `partial` without a body. The package implements them for you.
@@ -57,6 +74,26 @@ Regular properties in the class are left alone. To opt in only some navigations,
 
 You can also override the context's settings for a single entity or navigation. See [Per-entity settings](#per-entity-settings).
 
+#### Base classes
+
+`[LazyLoad]` works on base classes, including abstract ones. Each entity needs exactly one `ILazyLoader` member for its whole inheritance hierarchy. The package adds it to the topmost `[LazyLoad]` class, and derived classes reuse it, even ones in other projects:
+
+```csharp
+[LazyLoad]
+public abstract partial class EntityBase
+{
+    public int Id { get; set; }
+}
+
+[LazyLoad]
+public partial class Customer : EntityBase
+{
+    public partial Address Address { get; set; }
+}
+```
+
+If your entity (or one of its base classes) already declares an `ILazyLoader` field or property, as with EF Core's [lazy loading without proxies](https://learn.microsoft.com/en-us/ef/core/querying/related-data/lazy#lazy-loading-without-proxies), the package uses that member instead of adding one. It must be accessible from derived classes (`protected` or wider).
+
 #### Read-only collections (DDD style)
 
 If your entities keep a collection in a private field and expose it read-only, declare the navigation as a get-only `partial` property next to the field:
@@ -85,9 +122,43 @@ public partial class Customer
 
 The package finds the field by EF Core's backing-field naming convention (`_addresses`, `_Addresses`, `m_addresses`, `m_Addresses` or `addresses`). Accessing `Addresses` loads the collection into that field, then returns it. When the field is a `List<T>` and the property is a read-only type such as `IEnumerable<T>`, `IReadOnlyCollection<T>` or `IReadOnlyList<T>`, the property returns `_addresses.AsReadOnly()`, so callers can't cast it back to the list and change it.
 
+The field can be nullable (`private List<Address>? _addresses;`). EF Core creates the list when it loads the collection, so the property returns an empty collection, not `null`, when there are no rows.
+
 Code inside the entity that uses the field directly (`_addresses.Count`, `_addresses.Contains(...)`) does **not** trigger a lazy load, and sees an empty list if the collection wasn't loaded. Read through the property, as `AddAddress` does above, whenever the result depends on what's already in the database.
 
 A property written by hand, such as `public IEnumerable<Address> Addresses => _addresses.AsReadOnly();`, is never lazy-loaded, and in `Throw` mode it doesn't throw either: it returns the empty list. The package reports warning EFLL010 for such properties in a `[LazyLoad]` class.
+
+#### Collections with a custom getter
+
+Some getters can't be generated, for example one that copies the list under a lock. Write the getter yourself, and have it ask the entity's `ILazyLoader` to load the navigation before reading the field. Declare the `ILazyLoader` member yourself (see [Base classes](#base-classes)) so your code can call it:
+
+```csharp
+[LazyLoad]
+public partial class Opportunity
+{
+    private readonly Lock _sync = new();
+    private readonly List<Quote> _quotes = [];
+
+    [JsonIgnore]
+    protected ILazyLoader? LazyLoader { get; set; }
+
+    public IReadOnlyList<Quote> Quotes
+    {
+        get
+        {
+            lock (_sync)
+            {
+                LazyLoader?.Load(this, nameof(Quotes));
+                return _quotes.ToList().AsReadOnly();
+            }
+        }
+    }
+}
+```
+
+The call follows the context's settings like a generated getter does: it loads, logs, or throws `NavigationNotLoadedException` in `Throw` mode. EFLL010 isn't reported for a getter that calls the loader.
+
+To silence EFLL010 for a property that really shouldn't be lazy-loaded, use `#pragma warning disable EFLL010` around it, or set `dotnet_diagnostic.EFLL010.severity` in your `.editorconfig`.
 
 ### 3. Enable it on your DbContext
 
@@ -105,6 +176,17 @@ builder.Services.AddDbContext<AppDbContext>(options => options
 
 It also works with `AddDbContextPool` and with contexts you configure in `OnConfiguring`.
 
+If some code builds the options itself and creates the context with `new` (some messaging and job frameworks do), pass your service provider: `UseLazyLoad(serviceProvider)`. It picks up options registered with [`AddEFCoreLazyLoad`](#configuring-through-dependency-injection) and logs to the application's `ILoggerFactory`, which EF Core can't find on its own for such contexts:
+
+```csharp
+var options = new DbContextOptionsBuilder<AppDbContext>()
+    .UseNpgsql(connectionString)
+    .UseLazyLoad(serviceProvider)
+    .Options;
+
+using var db = new AppDbContext(options);
+```
+
 ### 4. Use your entities
 
 ```csharp
@@ -121,7 +203,7 @@ var city = customer.Address.City; // Load mode: Address is loaded here, not null
 | `LogLazyLoads` | `false` | Log a message each time a navigation is lazy-loaded (or blocked in `Throw` mode). |
 | `LogLevel` | `LogLevel.Warning` | The level those messages are logged at. |
 | `LogStackTrace` | `true` | Attach the call stack of the code that read the navigation to each message, so you can find where the lazy load came from. See [Logging](#logging). |
-| `LoggerFactory` | `null` | The logger factory to write to. When not set, the application's `ILoggerFactory` is used (the one registered in your service collection when you use `AddDbContext`). |
+| `LoggerFactory` | `null` | The logger factory to write to. When not set, the application's `ILoggerFactory` is used: the one from the service provider passed to `UseLazyLoad(serviceProvider)`, or otherwise the one EF Core uses for the context (your service collection's, when you use `AddDbContext`). |
 
 ### Configuring through dependency injection
 
@@ -192,7 +274,7 @@ warn: Rally25rs.EFCoreLazyLoad[1] Lazy-loading navigation 'OrderLine.Product'. C
 - `LazyLoadStackTrace` is never thrown; it only carries the stack trace. Its `EntityType` and `NavigationName` properties identify the navigation. If your monitoring treats every logged exception as an error, set `LogStackTrace = false` for the context, or per entity with `[LazyLoad(LogStackTrace = false)]`.
 - The stack trace is only captured when the message will actually be written (logging enabled at that level).
 
-If you create your `DbContext` with `new` rather than through dependency injection, set `LoggerFactory` (or call EF Core's `UseLoggerFactory`) so the messages have somewhere to go.
+If you create your `DbContext` with `new` rather than through dependency injection, use `UseLazyLoad(serviceProvider)`, set `LoggerFactory`, or call EF Core's `UseLoggerFactory`, so the messages have somewhere to go.
 
 ## Using with Ardalis.Specification
 
@@ -238,6 +320,14 @@ var name = lines[0].Product.Name;   // Load mode: loaded now, and logged as 'Ord
 - **Per-entity settings** from `[LazyLoad(...)]` apply to entities returned by specifications, too.
 - **`WithSpecification`** on a `DbSet` or `IQueryable` behaves the same as the repository methods.
 
+## Adding the package to an existing codebase
+
+- **Regenerate compiled models.** If you use an EF Core [compiled model](https://learn.microsoft.com/en-us/ef/core/performance/advanced-performance-topics#compiled-models) (`dotnet ef dbcontext optimize`), regenerate it after marking your entities. The package adds an `ILazyLoader` member to each entity, which the model must include.
+- **No migration is needed.** The added members aren't mapped to columns, so the database schema doesn't change.
+- **Read collections through the property inside the entity.** Domain methods that read the backing field directly (`_lines.Count`, `_lines.Any(...)`) don't trigger a lazy load. Read through the property when the result depends on rows already in the database. See [Read-only collections](#read-only-collections-ddd-style).
+- **Use the warnings to find what's left.** EFLL010 points at hand-written read-only collections in `[LazyLoad]` classes. Running your tests in `Throw` mode shows every navigation that is still read without being loaded.
+- **XML documentation** is generated for the added member, so projects with `GenerateDocumentationFile` and warnings as errors keep building.
+
 ## Behavior notes
 
 - **Lazy loading is synchronous.** Reading a navigation property that needs loading runs a blocking database query. This is the same as EF Core's own built-in [lazy loading](https://learn.microsoft.com/en-us/ef/core/querying/related-data/lazy), which this package builds on. Property getters can't be awaited, so neither implementation can load asynchronously. It keeps your code simple, but loading inside a loop issues one query per item (the "N+1" problem), which Microsoft warns about in [Beware of lazy loading](https://learn.microsoft.com/en-us/ef/core/performance/efficient-querying#beware-of-lazy-loading). Use the log messages to find these spots and replace them with `Include`.
@@ -264,4 +354,4 @@ The package reports build errors when an entity is not set up correctly:
 | EFLL007 | A base class has a lazy-loader member that is not accessible from the derived class. |
 | EFLL008 | The project's C# language version is older than 14. |
 | EFLL009 | A get-only `partial` navigation's backing field has a type that can't be returned as the property's type. |
-| EFLL010 | Warning: a `[LazyLoad]` class has a non-`partial`, get-only collection property over a backing field, so it will never be lazy-loaded. Make it `partial` with only `get;`. |
+| EFLL010 | Warning: a `[LazyLoad]` class has a non-`partial`, get-only collection property over a backing field, so it will never be lazy-loaded. Make it `partial` with only `get;`, or [call the loader from your getter](#collections-with-a-custom-getter). Can be suppressed with `#pragma warning disable EFLL010`. |

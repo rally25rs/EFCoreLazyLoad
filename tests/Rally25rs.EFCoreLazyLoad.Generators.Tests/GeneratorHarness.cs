@@ -1,6 +1,7 @@
 using System.Collections.Immutable;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.Diagnostics;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 
 namespace Rally25rs.EFCoreLazyLoad.Generators.Tests;
@@ -40,9 +41,10 @@ internal static class GeneratorHarness
         LanguageVersion languageVersion = LanguageVersion.CSharp14,
         IEnumerable<MetadataReference>? extraReferences = null,
         string assemblyName = "TestAssembly",
-        bool includeAttribute = true)
+        bool includeAttribute = true,
+        DocumentationMode documentationMode = DocumentationMode.Parse)
     {
-        var parseOptions = ParseOptions.WithLanguageVersion(languageVersion);
+        var parseOptions = ParseOptions.WithLanguageVersion(languageVersion).WithDocumentationMode(documentationMode);
         SyntaxTree[] trees = includeAttribute
             ? [CSharpSyntaxTree.ParseText(AttributeSource, parseOptions, path: "LazyLoadAttribute.cs"), CSharpSyntaxTree.ParseText(source, parseOptions, path: "Entities.cs")]
             : [CSharpSyntaxTree.ParseText(source, parseOptions, path: "Entities.cs")];
@@ -61,10 +63,12 @@ internal static class GeneratorHarness
                 }));
     }
 
-    public static GeneratorDriver CreateDriver(LanguageVersion languageVersion = LanguageVersion.CSharp14)
+    public static GeneratorDriver CreateDriver(
+        LanguageVersion languageVersion = LanguageVersion.CSharp14,
+        DocumentationMode documentationMode = DocumentationMode.Parse)
         => CSharpGeneratorDriver.Create(
             [new LazyLoadGenerator().AsSourceGenerator()],
-            parseOptions: ParseOptions.WithLanguageVersion(languageVersion),
+            parseOptions: ParseOptions.WithLanguageVersion(languageVersion).WithDocumentationMode(documentationMode),
             driverOptions: new GeneratorDriverOptions(IncrementalGeneratorOutputKind.None, trackIncrementalGeneratorSteps: true));
 
     public static RunResult Run(
@@ -96,6 +100,20 @@ internal static class GeneratorHarness
             problems.Count == 0,
             "Compilation reported:\n" + string.Join("\n", problems) + "\n\nGenerated:\n" + result.AllGeneratedSource);
         return result;
+    }
+
+    /// <summary>
+    ///     Runs the generator, then <see cref="LazyLoadAnalyzer" /> over the output, and returns the analyzer's
+    ///     diagnostics the way the compiler reports them (so <c>#pragma warning disable</c> is honored).
+    /// </summary>
+    public static ImmutableArray<Diagnostic> RunAnalyzer(string source)
+    {
+        var output = Run(source).Output;
+        return output
+            .WithAnalyzers([new LazyLoadAnalyzer()])
+            .GetAnalyzerDiagnosticsAsync(TestContext.Current.CancellationToken)
+            .GetAwaiter()
+            .GetResult();
     }
 
     private static ImmutableArray<MetadataReference> LoadReferences()
