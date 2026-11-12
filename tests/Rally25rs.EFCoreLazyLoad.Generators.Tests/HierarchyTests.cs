@@ -1,4 +1,5 @@
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
 
 namespace Rally25rs.EFCoreLazyLoad.Generators.Tests;
 
@@ -140,5 +141,54 @@ public class HierarchyTests
 
         Assert.NotNull(compilation.GetTypeByMetadataName(metadataName));
         return members;
+    }
+
+    [Fact]
+    public void AbstractBaseEntity_InProjectGeneratingXmlDocs_HasNoMissingDocWarning()
+    {
+        // The generated loader field is protected on a public type, so it needs a doc comment (CS1591), which
+        // projects with <GenerateDocumentationFile> and warnings as errors would otherwise fail on.
+        var compilation = GeneratorHarness.CreateCompilation(
+            """
+            using Rally25rs.EFCoreLazyLoad;
+            namespace Zoo;
+
+            /// <summary>A related entity.</summary>
+            public class Owner
+            {
+                /// <summary>The key.</summary>
+                public int Id { get; set; }
+            }
+
+            /// <summary>The base of every entity.</summary>
+            [LazyLoad]
+            public abstract partial class EntityBase
+            {
+                /// <summary>The key.</summary>
+                public int Id { get; set; }
+            }
+
+            /// <summary>A pet.</summary>
+            [LazyLoad]
+            public partial class Pet : EntityBase
+            {
+                /// <summary>The owner.</summary>
+                public partial Owner Owner { get; set; }
+            }
+            """,
+            documentationMode: DocumentationMode.Diagnose);
+
+        GeneratorHarness.CreateDriver(documentationMode: DocumentationMode.Diagnose)
+            .RunGeneratorsAndUpdateCompilation(compilation, out var output, out var generatorDiagnostics, TestContext.Current.CancellationToken);
+
+        Assert.Empty(generatorDiagnostics);
+        Assert.Contains(
+            output.SyntaxTrees,
+            t => t.ToString().Contains("protected global::Microsoft.EntityFrameworkCore.Infrastructure.ILazyLoader? __lazyLoader;", StringComparison.Ordinal));
+        var docProblems = output.GetDiagnostics(TestContext.Current.CancellationToken)
+            .Where(d => d.Id.StartsWith("CS15", StringComparison.Ordinal)
+                && d.Location.SourceTree?.FilePath.EndsWith(".g.cs", StringComparison.Ordinal) == true)
+            .ToList();
+        Assert.True(docProblems.Count == 0, string.Join("\n", docProblems));
     }
 }

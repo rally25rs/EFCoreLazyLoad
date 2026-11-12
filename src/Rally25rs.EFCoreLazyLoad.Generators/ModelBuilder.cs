@@ -127,16 +127,11 @@ internal static class ModelBuilder
         {
             // Class-level [LazyLoad] only applies to partial properties; ordinary ones (keys,
             // scalars) are left alone.
+            // (EFLL010, the hand-written read-only collection pattern, is reported by LazyLoadAnalyzer so that it
+            // can be suppressed with #pragma, which doesn't apply to generator diagnostics.)
             if (explicitlyMarked)
             {
                 diagnostics.Add(DiagnosticInfo.Create(Diagnostics.PropertyNotPartial, location, name));
-            }
-            else if (LooksLikeUnimplementedCollectionNavigation(property) is { } exposedField)
-            {
-                // The DDD read-only collection pattern written by hand (`IEnumerable<T> Items => _items`):
-                // it compiles and works with Include, but silently never lazy-loads (nor throws in Throw mode).
-                diagnostics.Add(DiagnosticInfo.Create(
-                    Diagnostics.BackingFieldPropertyNotPartial, location, name, exposedField.Name));
             }
 
             return null;
@@ -241,7 +236,7 @@ internal static class ModelBuilder
     ///     The field EF Core's backing-field convention would match to the property: <c>_name</c>, <c>_Name</c>,
     ///     <c>m_name</c>, <c>m_Name</c>, then <c>name</c> (declared on the property's own type).
     /// </summary>
-    private static IFieldSymbol? FindBackingField(IPropertySymbol property)
+    internal static IFieldSymbol? FindBackingField(IPropertySymbol property)
     {
         var pascal = property.Name;
         var camel = char.ToLowerInvariant(pascal[0]) + pascal.Substring(1);
@@ -289,22 +284,7 @@ internal static class ModelBuilder
         return conversion.IsImplicit && !conversion.IsUserDefined ? fieldName + suppress : null;
     }
 
-    /// <summary>
-    ///     For EFLL010: a non-partial, get-only collection property (of a class element type other than
-    ///     <see cref="string" />) whose convention backing field is a collection too. Returns that field.
-    /// </summary>
-    private static IFieldSymbol? LooksLikeUnimplementedCollectionNavigation(IPropertySymbol property)
-    {
-        if (property.IsStatic || property.IsIndexer || property.GetMethod is null || property.SetMethod is not null
-            || property.IsImplicitlyDeclared || !IsEntityCollection(property.Type))
-        {
-            return null;
-        }
-
-        return FindBackingField(property) is { } field && IsEntityCollection(field.Type) ? field : null;
-    }
-
-    private static bool IsEntityCollection(ITypeSymbol type)
+    internal static bool IsEntityCollection(ITypeSymbol type)
     {
         if (type.SpecialType == SpecialType.System_String)
         {
@@ -357,11 +337,11 @@ internal static class ModelBuilder
         return false;
     }
 
-    private static bool IsLazyLoader(ITypeSymbol type)
+    internal static bool IsLazyLoader(ITypeSymbol type)
         => type is INamedTypeSymbol { Name: "ILazyLoader", TypeKind: TypeKind.Interface } named
             && named.ContainingNamespace.ToDisplayString() == "Microsoft.EntityFrameworkCore.Infrastructure";
 
-    private static bool HasLazyLoadAttribute(ISymbol symbol)
+    internal static bool HasLazyLoadAttribute(ISymbol symbol)
         => symbol.GetAttributes().Any(a => a.AttributeClass?.ToDisplayString() == LazyLoadGenerator.AttributeMetadataName);
 
     private static bool IsPartial(INamedTypeSymbol type)

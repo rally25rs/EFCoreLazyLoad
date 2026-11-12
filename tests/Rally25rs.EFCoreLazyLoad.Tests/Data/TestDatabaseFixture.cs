@@ -31,6 +31,12 @@ public sealed class TestDatabaseFixture : IDisposable
     /// <summary>An <see cref="Order" /> with no lines.</summary>
     public const int OrderWithoutLinesId = 2;
 
+    /// <summary>A <see cref="Shipment" /> with two parcels and one label.</summary>
+    public const int ShipmentWithParcelsId = 1;
+
+    /// <summary>A <see cref="Shipment" /> with no parcels and no labels (its <c>_labels</c> field stays null).</summary>
+    public const int EmptyShipmentId = 2;
+
     public TestDatabaseFixture()
     {
         var dir = Path.Combine(FindTestProjectDirectory(), "TestDb");
@@ -125,6 +131,12 @@ public sealed class TestDatabaseFixture : IDisposable
         order.AddLine("Gadget", 1);
         context.Orders.Add(order);
         context.Orders.Add(new Order { Id = OrderWithoutLinesId, Reference = "ORD-2" });
+        var shipment = new Shipment { Id = ShipmentWithParcelsId, Reference = "SHP-1" };
+        shipment.AddParcel(new Parcel { WeightKg = 1.5 });
+        shipment.AddParcel(new Parcel { WeightKg = 4 });
+        shipment.AddLabel(new Label { Text = "Fragile" });
+        context.Shipments.Add(shipment);
+        context.Shipments.Add(new Shipment { Id = EmptyShipmentId, Reference = "SHP-2" });
         context.SaveChanges();
     }
 

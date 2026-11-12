@@ -12,6 +12,9 @@ public class TestDbContext(DbContextOptions<TestDbContext> options) : DbContext(
     public DbSet<Product> Products => Set<Product>();
     public DbSet<Order> Orders => Set<Order>();
     public DbSet<OrderLine> OrderLines => Set<OrderLine>();
+    public DbSet<Shipment> Shipments => Set<Shipment>();
+    public DbSet<Parcel> Parcels => Set<Parcel>();
+    public DbSet<Label> Labels => Set<Label>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -43,5 +46,17 @@ public class TestDbContext(DbContextOptions<TestDbContext> options) : DbContext(
             .HasMany(o => o.Lines)
             .WithOne(l => l.Order)
             .HasForeignKey(l => l.OrderId);
+
+        // A hand-written lazy-loading getter (Parcels, over `_parcels`) and a nullable backing field (Labels, over
+        // `_labels`), both mapped by convention.
+        modelBuilder.Entity<Shipment>()
+            .HasMany(s => s.Parcels)
+            .WithOne(p => p.Shipment)
+            .HasForeignKey(p => p.ShipmentId);
+
+        modelBuilder.Entity<Shipment>()
+            .HasMany(s => s.Labels)
+            .WithOne()
+            .HasForeignKey(l => l.ShipmentId);
     }
 }
